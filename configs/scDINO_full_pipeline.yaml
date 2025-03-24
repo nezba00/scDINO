@@ -1,21 +1,21 @@
 meta:
-  name_of_run: "name_of_run"
-  output_dir: "/outputdir"
-  dataset_dir: "/datasetdir"
+  name_of_run: "scDINO_test_1"
+  output_dir: "/home/nbahou/myimaging/scDINO/output"
+  dataset_dir: "/home/nbahou/myimaging/apoDet/data/windows_test"
   folder_depth_for_labels: 0 # 0 is the folder where the images are, 1 is the folder above, etc.
   train_datasetsplit_fraction: 0.8
   seed: 40
   images_are_RGB: False
-  channel_dict: { 0: "aTub", 1: "BF", 2: "DAPI", 3: "Oct4", 4: "PE" } #do not use underscore or slash in channel name
-  selected_channel_combination_per_run: ["01234", "0", "1", "2", "3", "4"] #01234 is all 5 channels, 0 is only APC, 1 is only BF, etc.
+  channel_dict: { 0: "0",1: "1",2: "2",3: "3",4: "4" } #do not use underscore or slash in channel name
+  selected_channel_combination_per_run: ["01234"] #01234 is all 5 channels, 0 is only APC, 1 is only BF, etc.
   center_crop: 0 #0 is no center crop
 
 train_scDINO:
-  dino_vit_name: "name_of_model"
-  fraction_for_mean_std_calc: 0.2
+  dino_vit_name: "5t_apo_test"
+  fraction_for_mean_std_calc: 0.1
   epochs: 10
   saveckp_freq: 2
-  num_gpus: 2
+  num_gpus: 1
   batch_size_per_gpu: 30
   num_workers: 8
   dist_url: "env://"
@@ -45,12 +45,12 @@ train_scDINO:
 downstream_analyses:
   compute_cls_features:
     normalize: True
-    num_gpus: 2
-    batch_size_per_gpu: 24
+    num_gpus: 1
+    batch_size_per_gpu: 12  #24
     num_workers: 8
     checkpoint_key: teacher
     resize: True
-    resize_length: 224 #only used if resize is True
+    resize_length: 48 #224 #only used if resize is True
   attention_visualisation:
     num_images_per_class: 1
     resize_attention_image: True

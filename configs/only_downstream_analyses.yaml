@@ -1,13 +1,13 @@
 meta:
-  name_of_run: "name_of_run"
-  output_dir: "outputdir"
-  dataset_dir: "datasetdir"
+  name_of_run: "scDINOtest1"
+  output_dir: "/home/nbahou/myimaging/scDINO/output"
+  dataset_dir: "/home/nbahou/myimaging/apoDet/data/windows_test"
   folder_depth_for_labels: 0 # 0 is the folder where the images are, 1 is the folder above, etc.
   test_datasetsplit_fraction: 0.1
   seed: 40 #should match scDINO seed if you want to use the same train/test split
   images_are_RGB: False
-  channel_dict: { 0: "APC", 1: "BF", 2: "DAPI", 3: "GREEN", 4: "PE" } #do not use underscore or slash in channel name
-  selected_channel_combination_per_run: ["01234", "0", "1", "2", "3", "4"] #01234 is all 5 channels, 0 is only APC, 1 is only BF, etc.
+  channel_dict: { 0: "0",1: "1",2: "2",3: "3",4: "4" } #do not use underscore or slash in channel name
+  selected_channel_combination_per_run: ["01234"] #01234 is all 5 channels, 0 is only APC, 1 is only BF, etc.
   center_crop: 0 #0 is no center crop
 compute_cls_features:
   use_weighted_sampler: False # if False, valdataset is used defined in meta
@@ -20,7 +20,7 @@ compute_cls_features:
   use_cuda: True
   num_gpus: 1
   batch_size_per_gpu: 24
-  num_workers: 8
+  num_workers: 16
   pretrained_weights: "dir_to_pretrained_weights"
   read_model_arch_dynamically: False
   arch: "vit_small" #only used if read_model_arch_dynamically is False

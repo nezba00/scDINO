@@ -1,0 +1,6 @@
+**/.snakemake
+**/slurm_logs
+**/.ipynb_checkpoints
+*.log
+**/output
+**/__pycache__

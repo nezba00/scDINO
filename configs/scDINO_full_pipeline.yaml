@@ -1,7 +1,7 @@
 meta:
-  name_of_run: "scDINO_test_5"
+  name_of_run: "scDINO_20x_ds2_t5_3cat"
   output_dir: "/home/nbahou/myimaging/scDINO/output"
-  dataset_dir: "/home/nbahou/myimaging/apoDet/data/windows_48"
+  dataset_dir: "/home/nbahou/myimaging/apoDet/data/dataset2/windows_20x"
   folder_depth_for_labels: 0 # 0 is the folder where the images are, 1 is the folder above, etc.
   train_datasetsplit_fraction: 0.8
   seed: 40
@@ -11,10 +11,10 @@ meta:
   center_crop: 0 #0 is no center crop
 
 train_scDINO:
-  dino_vit_name: "5t_apo_test"
+  dino_vit_name: "100ep_5ch_baseline_vitSmall16"
   fraction_for_mean_std_calc: 0.1
-  epochs: 10
-  saveckp_freq: 2
+  epochs: 100
+  saveckp_freq: 10
   num_gpus: 1
   batch_size_per_gpu: 30
   num_workers: 8
@@ -34,28 +34,28 @@ train_scDINO:
     clip_grad: 3
     freeze_last_layer: 1
     lr: 0.0005
-    warmup_epochs: 5
-    min_lr: 0.000001
+    warmup_epochs: 10
+    min_lr: 0.000005
     optimizer: "adamw"
     drop_path_rate: 0.1
     global_crops_scale: !!python/tuple [0.14, 1.0]    #
     local_crops_number: 8
     local_crops_scale: !!python/tuple [0.05, 0.14]    #
-    # out_dim: 1120  Lucien put this in his code
+    # out_dim: 1120  Lucien put this in his code. seems a bit small?
 
 downstream_analyses:
   compute_cls_features:
     normalize: True
     num_gpus: 1
-    batch_size_per_gpu: 12  #24
-    num_workers: 8
+    batch_size_per_gpu: 256  #24
+    num_workers: 16
     checkpoint_key: teacher
     resize: False    # True   was true before, Now did 48x48 crops by myself
     resize_length: 48 #224 #only used if resize is True
   attention_visualisation:
-    num_images_per_class: 1
+    num_images_per_class: 2
     resize_attention_image: True
-    image_size: 480
+    image_size: 128
   kNN:
     global:
       n_neighbors: [5, 10, 50, 100, 200, 500]
@@ -67,4 +67,4 @@ downstream_analyses:
     metric: euclidean
     spread: 1.1
     epochs: 100
-    topometry_plots: False
+    topometry_plots: True

@@ -2,13 +2,18 @@
 
 from __future__ import annotations
 
+import json
+
 import numpy as np
 import pandas as pd
-from dash import Input, Output, State, callback_context, html, no_update
+from dash import ALL, Input, Output, State, callback_context, html, no_update
 from dash.exceptions import PreventUpdate
 
 from ..embedding import compute_embedding
 from .figures import build_main_figure
+
+# Max display length for class names in the UI
+_MAX_CLASS_LEN = 16
 
 # Panel IDs in tab order
 _PANELS = ["panel-view", "panel-tracks", "panel-labels", "panel-umap", "panel-ml"]
@@ -19,6 +24,12 @@ _TAB_TO_PANEL = {
     "tab-umap": "panel-umap",
     "tab-ml": "panel-ml",
 }
+
+
+def _trunc(text: str, maxlen: int = _MAX_CLASS_LEN) -> str:
+    """Truncate text with ellipsis if too long."""
+    s = str(text)
+    return s[:maxlen - 2] + ".." if len(s) > maxlen else s
 
 
 def register(app):
@@ -142,19 +153,25 @@ def register(app):
         neighbor_rows = state.df_filtered.iloc[indices.flatten()].copy()
         neighbor_rows["_dist"] = distances.flatten()
 
+        _, color_mapping, _ = state.color_map(state.df["phenotype"])
+
         nn_items = []
         for _, nrow in neighbor_rows.iterrows():
             track_id = nrow["track_id"]
             t_val = nrow.get("t", "?")
-            pheno = nrow.get("phenotype", "?")
+            pheno = str(nrow.get("phenotype", "?"))
             dist = nrow["_dist"]
+            dot_color = color_mapping.get(pheno, "#AAAAAA")
             nn_items.append(
                 html.Div(
                     className="nn-row",
                     children=[
+                        html.Span(className="color-dot",
+                                  style={"backgroundColor": dot_color}),
                         html.Span(f"#{track_id}", className="nn-field"),
                         html.Span(f"t={t_val}", className="nn-field"),
-                        html.Span(str(pheno), className="nn-field"),
+                        html.Span(_trunc(pheno), className="nn-field",
+                                  title=pheno),
                         html.Span(f"{dist:.3f}", className="nn-dist"),
                     ],
                 )
@@ -163,19 +180,15 @@ def register(app):
         return coords_text, nn_items
 
     # ------------------------------------------------------------------ #
-    #  Lasso/box select → stats OR annotate
+    #  Lasso/box select → stats
     # ------------------------------------------------------------------ #
 
     @app.callback(
         Output("selection-stats", "children"),
-        Output("figure-trigger", "data", allow_duplicate=True),
         Input("umap-graph", "selectedData"),
-        State("annotation-mode", "value"),
-        State("annotation-text", "value"),
-        State("figure-trigger", "data"),
         prevent_initial_call=True,
     )
-    def on_select(selected_data, annotation_mode, annotation_text, trigger):
+    def on_select(selected_data):
         from .app import state
         if state is None or selected_data is None:
             raise PreventUpdate
@@ -191,39 +204,195 @@ def register(app):
         sel_idx = [state.df_filtered.index[i] for i in point_indices
                    if i < len(state.df_filtered)]
 
-        annotation_active = annotation_mode and "on" in annotation_mode
-
-        if annotation_active:
-            label = (annotation_text or "new_label").strip()
-            state.df.loc[sel_idx, "label_manual"] = label
-            state.df_filtered = state.df.loc[state.df_filtered.index]
-
-            stats_content = html.Div([
-                html.Div(f"Labeled {len(sel_idx)} points as '{label}'",
-                         style={"color": "#859900"}),
-            ])
-            return stats_content, (trigger or 0) + 1
+        # Store selection indices on state for apply-label
+        state._last_selection = sel_idx
 
         selected = state.df_filtered.loc[sel_idx]
         counts = selected["phenotype"].value_counts()
         total = counts.sum()
+        _, color_mapping, _ = state.color_map(state.df["phenotype"])
+
+        # Color-coded distribution bar
+        bar_segments = []
+        for pheno, count in counts.items():
+            pct = count / total * 100
+            dot_color = color_mapping.get(str(pheno), "#AAAAAA")
+            bar_segments.append(
+                html.Div(
+                    style={
+                        "width": f"{pct}%",
+                        "backgroundColor": dot_color,
+                        "height": "100%",
+                    },
+                    title=f"{pheno}: {pct:.1f}%",
+                )
+            )
+        dist_bar = html.Div(
+            className="distribution-bar",
+            children=bar_segments,
+        )
+
+        # Per-class rows with color dots, truncated names, right-aligned pct
         stats_rows = []
         for pheno, count in counts.items():
             pct = count / total * 100
+            dot_color = color_mapping.get(str(pheno), "#AAAAAA")
             stats_rows.append(
                 html.Div(
                     className="stats-row",
                     children=[
-                        html.Span(str(pheno)),
-                        html.Span(f"{count} ({pct:.1f}%)"),
+                        html.Span(className="color-dot",
+                                  style={"backgroundColor": dot_color}),
+                        html.Span(_trunc(str(pheno)), className="stats-name",
+                                  title=str(pheno)),
+                        html.Span(f"{count} ({pct:.1f}%)", className="stats-pct"),
                     ],
                 )
             )
         stats_content = html.Div([
             html.Div(f"Selected {len(sel_idx)} points", style={"marginBottom": "4px"}),
+            dist_bar,
             *stats_rows,
         ])
-        return stats_content, no_update
+        return stats_content
+
+    # ------------------------------------------------------------------ #
+    #  Label management
+    # ------------------------------------------------------------------ #
+
+    @app.callback(
+        Output("labels-store", "data"),
+        Output("label-list", "children"),
+        Output("annotation-text", "value"),
+        Output("active-label-store", "data"),
+        Output("active-label-display", "children"),
+        Output("figure-trigger", "data", allow_duplicate=True),
+        Input("add-label-btn", "n_clicks"),
+        Input({"type": "label-select-btn", "index": ALL}, "n_clicks"),
+        Input({"type": "label-delete-btn", "index": ALL}, "n_clicks"),
+        State("annotation-text", "value"),
+        State("labels-store", "data"),
+        State("active-label-store", "data"),
+        State("figure-trigger", "data"),
+        prevent_initial_call=True,
+    )
+    def manage_labels(add_click, select_clicks, delete_clicks,
+                      text_value, labels, active_label, trigger):
+        """Unified label management: add, select, delete."""
+        from .app import state
+        if state is None:
+            raise PreventUpdate
+
+        ctx = callback_context
+        if not ctx.triggered:
+            raise PreventUpdate
+
+        labels = labels or []
+        trigger_val = trigger or 0
+        fig_trigger = no_update
+
+        prop_id = ctx.triggered[0]["prop_id"]
+
+        # Add new label
+        if "add-label-btn" in prop_id:
+            new_label = (text_value or "").strip()
+            if new_label and new_label not in labels:
+                labels.append(new_label)
+                active_label = new_label
+
+        # Select a label
+        elif "label-select-btn" in prop_id:
+            try:
+                info = json.loads(prop_id.rsplit(".", 1)[0])
+                active_label = info["index"]
+            except Exception:
+                pass
+
+        # Delete a label
+        elif "label-delete-btn" in prop_id:
+            try:
+                info = json.loads(prop_id.rsplit(".", 1)[0])
+                lbl = info["index"]
+                if lbl in labels:
+                    labels.remove(lbl)
+                # Remove from all labeled points
+                if state is not None:
+                    mask = state.df["label_manual"] == lbl
+                    state.df.loc[mask, "label_manual"] = "unlabeled"
+                    fig_trigger = trigger_val + 1
+                if active_label == lbl:
+                    active_label = labels[0] if labels else None
+            except Exception:
+                pass
+
+        # Build label list UI
+        label_ui = _build_label_list(labels, active_label)
+        active_display = _active_label_display(active_label)
+
+        return labels, label_ui, "", active_label, active_display, fig_trigger
+
+    # Apply active label to current selection
+    @app.callback(
+        Output("selection-stats", "children", allow_duplicate=True),
+        Output("figure-trigger", "data", allow_duplicate=True),
+        Input("apply-label-btn", "n_clicks"),
+        State("active-label-store", "data"),
+        State("figure-trigger", "data"),
+        prevent_initial_call=True,
+    )
+    def apply_label(n_clicks, active_label, trigger):
+        from .app import state
+        if state is None or not n_clicks:
+            raise PreventUpdate
+
+        if not active_label:
+            return html.Div("No label selected", style={"color": "#DC322F"}), no_update
+
+        sel_idx = getattr(state, "_last_selection", None)
+        if not sel_idx:
+            return html.Div("No points selected", style={"color": "#DC322F"}), no_update
+
+        state.df.loc[sel_idx, "label_manual"] = active_label
+        state.df_filtered = state.df.loc[state.df_filtered.index]
+
+        msg = html.Div(
+            f"Labeled {len(sel_idx)} points as '{active_label}'",
+            style={"color": "#859900"},
+        )
+        return msg, (trigger or 0) + 1
+
+    def _build_label_list(labels, active_label):
+        """Build the scrollable label list with select/delete buttons."""
+        if not labels:
+            return html.Div("No labels defined", style={"color": "#93A1A1", "fontSize": "11px"})
+        items = []
+        for lbl in labels:
+            is_active = lbl == active_label
+            items.append(
+                html.Div(
+                    className="label-row" + (" label-row-active" if is_active else ""),
+                    children=[
+                        html.Button(
+                            _trunc(lbl, 20),
+                            id={"type": "label-select-btn", "index": lbl},
+                            className="label-select-btn",
+                            title=lbl,
+                        ),
+                        html.Button(
+                            "x",
+                            id={"type": "label-delete-btn", "index": lbl},
+                            className="label-delete-btn",
+                            title=f"Delete '{lbl}'",
+                        ),
+                    ],
+                )
+            )
+        return html.Div(items)
+
+    def _active_label_display(active_label):
+        if not active_label:
+            return html.Span("None selected", style={"color": "#93A1A1"})
+        return html.Span(active_label, style={"color": "#268BD2", "fontWeight": "700"})
 
     # ------------------------------------------------------------------ #
     #  Track management
@@ -355,11 +524,15 @@ def register(app):
         return report.summary()
 
     # ------------------------------------------------------------------ #
-    #  Clear annotations
+    #  Clear all annotations
     # ------------------------------------------------------------------ #
 
     @app.callback(
         Output("figure-trigger", "data", allow_duplicate=True),
+        Output("labels-store", "data", allow_duplicate=True),
+        Output("label-list", "children", allow_duplicate=True),
+        Output("active-label-store", "data", allow_duplicate=True),
+        Output("active-label-display", "children", allow_duplicate=True),
         Input("clear-labels-btn", "n_clicks"),
         State("figure-trigger", "data"),
         prevent_initial_call=True,
@@ -370,4 +543,10 @@ def register(app):
             raise PreventUpdate
 
         state.df["label_manual"] = "unlabeled"
-        return (trigger or 0) + 1
+        return (
+            (trigger or 0) + 1,
+            [],
+            html.Div("No labels defined", style={"color": "#93A1A1", "fontSize": "11px"}),
+            None,
+            html.Span("None selected", style={"color": "#93A1A1"}),
+        )

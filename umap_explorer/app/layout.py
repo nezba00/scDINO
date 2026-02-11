@@ -308,19 +308,33 @@ def _labels_tab() -> html.Div:
                     ),
                 ],
             ),
-            html.Label("Label Text"),
+            html.Label("Active Label"),
+            html.Div(id="active-label-display", className="active-label-display",
+                      children="None selected"),
+            html.Button(
+                "Apply to Selection", id="apply-label-btn",
+                className="btn-primary mt-4",
+                style={"width": "100%"},
+            ),
+            html.Label("Add New Label"),
             html.Div(
-                className="ctrl-row",
+                className="ctrl-row flex-row",
                 children=[
                     dcc.Input(
                         id="annotation-text",
                         type="text",
-                        value="new_label",
+                        placeholder="Label name...",
                         debounce=True,
-                        style={"width": "100%"},
+                        style={"flex": "1"},
                     ),
+                    html.Button("Add", id="add-label-btn", className="btn-success"),
                 ],
             ),
+            html.Label("Available Labels"),
+            html.Div(id="label-list", className="label-list"),
+            # Store the list of user labels and the currently active label
+            dcc.Store(id="labels-store", data=[]),
+            dcc.Store(id="active-label-store", data=None),
             html.Button(
                 "Clear All Labels", id="clear-labels-btn",
                 className="btn-warning mt-8",

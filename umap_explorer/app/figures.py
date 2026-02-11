@@ -69,26 +69,34 @@ def build_main_figure(
     color_values, color_mapping, unique_labels = state.color_map(scatter_data[color_by])
 
     # Build customdata + hovertemplate only for manageable sizes
+    _MAX_LABEL = 14  # truncate class names in hover
+
     n = len(scatter_data)
     if n < _CUSTOMDATA_THRESHOLD:
+        # Truncate class names for consistent hover box width
+        class_vals = scatter_data[color_by].astype(str).values
+        class_trunc = np.array([v[:_MAX_LABEL] + ".." if len(v) > _MAX_LABEL else v
+                                for v in class_vals])
+
+        border_colors = [color_mapping.get(v, "#AAAAAA") for v in class_vals]
+
         customdata = np.column_stack((
             scatter_data["track_id"].values,
-            scatter_data["original_track_id"].values if "original_track_id" in scatter_data.columns
-            else scatter_data["track_id"].values,
             scatter_data["t"].values if "t" in scatter_data.columns
             else np.full(n, ""),
-            scatter_data[color_by].values,
+            class_trunc,
         ))
         hovertemplate = (
-            "<b>Track:</b> %{customdata[0]}<br>"
-            "<b>Orig:</b> %{customdata[1]}<br>"
-            "<b>UMAP:</b> (%{x:.3f}, %{y:.3f})<br>"
-            + ("<b>t:</b> %{customdata[2]}<br>" if "t" in scatter_data.columns else "")
-            + f"<b>{color_by}:</b> %{{customdata[3]}}<extra></extra>"
+            "trk %{customdata[0]}"
+            + (" t=%{customdata[1]}" if "t" in scatter_data.columns else "")
+            + "<br>(%{x:.2f}, %{y:.2f})"
+            + "<br>%{customdata[2]}"
+            + "<extra></extra>"
         )
     else:
         customdata = None
-        hovertemplate = "<b>UMAP:</b> (%{x:.3f}, %{y:.3f})<extra></extra>"
+        border_colors = theme.BASE1
+        hovertemplate = "(%{x:.2f}, %{y:.2f})<extra></extra>"
 
     fig.add_trace(go.Scattergl(
         x=scatter_data["umap_1"].values,
@@ -103,6 +111,11 @@ def build_main_figure(
         ),
         customdata=customdata,
         hovertemplate=hovertemplate,
+        hoverlabel=dict(
+            bgcolor=theme.BASE2,
+            bordercolor=border_colors,
+            font=dict(family=theme.FONT_STACK, size=11, color=theme.BASE01),
+        ),
     ))
 
     # Legend traces
@@ -142,7 +155,9 @@ def _base_layout(drag_mode: str = "zoom") -> dict:
     """Return common layout kwargs."""
     return dict(
         dragmode=drag_mode,
-        uirevision="constant",
+        # Top-level uirevision changes with drag_mode so Plotly applies it;
+        # per-axis uirevision stays constant so zoom/pan is preserved.
+        uirevision=drag_mode,
         hovermode="closest",
         hoverdistance=10,
         paper_bgcolor=theme.BASE3,
@@ -154,12 +169,14 @@ def _base_layout(drag_mode: str = "zoom") -> dict:
             zeroline=False,
             title="UMAP 1",
             color=theme.BASE00,
+            uirevision="constant",
         ),
         yaxis=dict(
             showgrid=False,
             zeroline=False,
             title="UMAP 2",
             color=theme.BASE00,
+            uirevision="constant",
         ),
         legend=dict(
             font=dict(size=10),

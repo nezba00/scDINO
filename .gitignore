@@ -1,6 +1,16 @@
 **/.snakemake
 **/slurm_logs
+**/slurm_logs_old
+**/slurm_logs_old2
+**/umap_movie_grids
 **/.ipynb_checkpoints
 *.log
 **/output
 **/__pycache__
+/downstream_output/
+*.png
+*.npy
+*.tif
+*.mp4
+*.jsonl
+*.csv

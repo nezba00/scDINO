@@ -72,6 +72,8 @@ def batch_mean_and_sd(loader):
     snd_moment = torch.empty(c)
     
     for images, _ in loader:
+        if torch.isnan(images).any():
+            print(f"NaN detected in current batch! Check your normalization/raw data.")
         b, c, h, w = images.shape
         nb_pixels = b * h * w
         sum_ = torch.sum(images, dim=[0, 2, 3])
@@ -81,7 +83,12 @@ def batch_mean_and_sd(loader):
         snd_moment = (cnt * snd_moment + sum_of_square) / (cnt + nb_pixels)
         cnt += nb_pixels
 
-    mean, std = fst_moment, torch.sqrt(snd_moment - fst_moment ** 2)
+    variance = snd_moment - fst_moment ** 2
+    variance = torch.clamp(variance, min=0.0)
+    if (variance < 0).any():
+        print(f"Negative variance found in channels: {torch.where(variance < 0)[0]}")
+        print(f"Values: {variance[variance < 0]}")
+    mean, std = fst_moment, torch.sqrt(variance)
     return mean,std
   
 mean, std = batch_mean_and_sd(image_data_loader)

@@ -25,7 +25,7 @@ def extract_and_save_feature_pipeline(args):
     if not args.images_are_RGB:
         #image loader compatible with multi-channel images
         #prepare selected channels and their corresponding mean and std
-        selected_channels = list(map(int, args.selected_channels))
+        selected_channels = [int(str(ch), 16) for ch in args.selected_channels]
         transform = transforms.Compose([])
         if args.resize:
             transform.transforms.append(transforms.Resize(args.resize_length))
@@ -143,7 +143,12 @@ def extract_and_save_feature_pipeline(args):
     if "vit" in args.arch:
         num_in_chans_pretrained = utils.get_pretrained_weights_in_chans(args.pretrained_weights)
         print(f"Pretrained weights have {num_in_chans_pretrained} input channels")
-        model = vits.__dict__[args.arch](patch_size=args.patch_size, num_classes=0, in_chans=int(num_in_chans_pretrained))
+        model = vits.__dict__[args.arch](
+            patch_size=args.patch_size, 
+            num_classes=0, 
+            in_chans=int(num_in_chans_pretrained), 
+            img_size=[args.image_size]
+        )
         model.cuda()
         utils.load_pretrained_weights(model, args.pretrained_weights, args.checkpoint_key, args.arch, args.patch_size)
         model.eval()
@@ -254,6 +259,7 @@ if __name__ == '__main__':
         help="Should we store the features on GPU? We recommend setting this to False if you encounter OOM")
     parser.add_argument('--arch', default='vit_small', type=str, help='Architecture')
     parser.add_argument('--patch_size', default=16, type=int, help='Patch resolution of the model.')
+    parser.add_argument("--img_size", default=32, type=int, help="Model training resolution.")
     parser.add_argument("--checkpoint_key", default="teacher", type=str,
         help='Key to use in the checkpoint (example: "teacher")')
     parser.add_argument('--num_workers', default=0, type=int, help='Number of data loading workers per GPU.')
@@ -332,11 +338,12 @@ if __name__ == '__main__':
         def get_channel_name_combi(channel_combi, channel_dict):
             name_of_channel_combi = ""
             for channel_number in iter(str(channel_combi)):
-                name_of_channel_combi = "_".join([name_of_channel_combi, channel_dict[int(channel_number)]])
+                name_of_channel_combi = "_".join([name_of_channel_combi, channel_dict[int(channel_number, 16)]])
             return name_of_channel_combi
 
         #concatenate args.selected_channels to string
-        selected_channel_str = "".join(str(x) for x in args.selected_channels)
+        # FIX: Use format(x, 'x') to turn 10 into 'a' and 11 into 'b'
+        selected_channel_str = "".join(format(int(str(x), 16), 'x') for x in args.selected_channels)
         channel_names = get_channel_name_combi(selected_channel_str, args.channel_dict)
 
         if args.scDINO_full_pipeline:

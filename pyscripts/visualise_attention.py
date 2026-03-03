@@ -92,7 +92,8 @@ if __name__ == '__main__':
     parser.add_argument("--checkpoint_key", default="teacher", type=str,
         help='Key to use in the checkpoint (example: "teacher")')
     parser.add_argument('--resize_attention_image',type=str, default=True, help="Wheter to resize image or not")
-    parser.add_argument("--image_size", default=(480, 480), type=int, nargs="+", help="Resize image.")
+    parser.add_argument("--model_image_size", default=32, type=int, help="Model training resolution.")
+    parser.add_argument("--vis_image_size", default=(480, 480), type=int, nargs="+", help="Resize image.")
     parser.add_argument("--threshold", type=float, default=None, help="""We visualize masks
         obtained by thresholding the self-attention maps to keep xx% of the mass.""")
     parser.add_argument('--output_dir', default='.', type=str)    
@@ -133,6 +134,7 @@ if __name__ == '__main__':
         with open(args.norm_per_channel_file) as f:
             norm_per_channel_json = json.load(f)
             norm_per_channel = str([tuple(norm_per_channel_json['mean']), tuple(norm_per_channel_json['std'])])
+            print(norm_per_channel)
             args.norm_per_channel = norm_per_channel
 
     print("\n".join("%s: %s" % (k, str(v)) for k, v in sorted(dict(vars(args)).items())))
@@ -154,9 +156,14 @@ if args.read_model_arch_dynamically:
 # ============ building network ... ============
 # build model
 device = torch.device("cpu")
-selected_channels = list(map(int, args.selected_channels))
+selected_channels = [int(ch, 16) for ch in args.selected_channels]
 num_in_chans_pretrained = utils.get_pretrained_weights_in_chans(args.pretrained_weights)
-model = vits.__dict__[args.arch](patch_size=args.patch_size, num_classes=0, in_chans=num_in_chans_pretrained)
+model = vits.__dict__[args.arch](
+    patch_size=args.patch_size, 
+    num_classes=0, 
+    in_chans=num_in_chans_pretrained, 
+    img_size=[args.model_image_size]
+)
 for p in model.parameters():
     p.requires_grad = False
 model.eval()
@@ -216,7 +223,7 @@ def prepare_img(image, args):
         if args.resize:
             transform.transforms.append(transforms.Resize(args.resize_length))
         if args.normalize:
-            selected_channels = list(map(int, args.selected_channels))
+            selected_channels = [int(str(ch), 16) for ch in args.selected_channels]
             norm_per_channel = ast.literal_eval(args.norm_per_channel)
             mean_for_selected_channel, std_for_selected_channel = tuple([norm_per_channel[0][mean] for mean in selected_channels]), tuple([norm_per_channel[1][mean] for mean in selected_channels])
             transform.transforms.append(transforms.Normalize(mean=mean_for_selected_channel, std=std_for_selected_channel))
@@ -255,10 +262,10 @@ classes = utils.fetch_all_folder_names_of_folder_depth(dataset_total, folder_dep
 def get_channel_name_combi(channel_combi, channel_dict):
             name_of_channel_combi = ""
             for channel_number in iter(str(channel_combi)):
-                name_of_channel_combi = "_".join([name_of_channel_combi, channel_dict[int(channel_number)]])
+                name_of_channel_combi = "_".join([name_of_channel_combi, channel_dict[int(channel_number, 16)]])
             return name_of_channel_combi
 
-selected_channel_str = "".join(str(x) for x in args.selected_channels)
+selected_channel_str = "".join(format(int(x, 16), 'x') for x in args.selected_channels)
 channel_names = get_channel_name_combi(selected_channel_str, args.channel_dict)
 
 #create directory for attention images
@@ -323,7 +330,7 @@ for class_name in classes:
         images_to_visualise.append(img)
 
         if args.resize_attention_image:
-            resize= torchvision.transforms.Resize((args.image_size))
+            resize= torchvision.transforms.Resize((args.vis_image_size))
             img_resized = resize(img)
             images_to_visualise.append(img_resized)
         

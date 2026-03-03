@@ -44,6 +44,7 @@ def get_args_parser():
         values leads to better performance but requires more memory. Applies only
         for ViTs (vit_tiny, vit_small and vit_base). If <16, we recommend disabling
         mixed precision training (--use_fp16 false) to avoid unstabilities.""")
+    parser.add_argument('--image_size', default=32, type=int, help="Input resolution (global crop size).")
     parser.add_argument('--out_dim', default=65536, type=int, help="""Dimensionality of
         the DINO head output. For complex and large datasets large values (like 65k) work well.""")
     parser.add_argument('--norm_last_layer', default=True, type=utils.bool_flag,
@@ -155,7 +156,7 @@ def train_dino(args, save_dir):
         mean_for_selected_channel, std_for_selected_channel = tuple([norm_per_channel[0][mean] for mean in selected_channels]), tuple([norm_per_channel[1][std] for std in selected_channels])
         return mean_for_selected_channel, std_for_selected_channel
     
-    selected_channels = list(map(int, args.selected_channels))
+    selected_channels = list(map(lambda x: int(x, 16), args.selected_channels))
     mean_for_selected_channel, std_for_selected_channel = create_mean_std_per_channel_for_channel_combi(args.norm_per_channel_file, selected_channels)
     
     transform = DataAugmentationDINO(
@@ -165,6 +166,7 @@ def train_dino(args, save_dir):
         args.local_crops_number,
         mean_for_selected_channel, 
         std_for_selected_channel,
+        res=args.image_size,
     )
 
     if not args.images_are_RGB:
@@ -237,9 +239,10 @@ def train_dino(args, save_dir):
         student = vits.__dict__[args.arch](
             patch_size=args.patch_size,
             drop_path_rate=args.drop_path_rate,
-            in_chans= len(selected_channels)
+            in_chans= len(selected_channels),
+            img_size=[args.image_size],
         )
-        teacher = vits.__dict__[args.arch](patch_size=args.patch_size, in_chans= len(selected_channels))
+        teacher = vits.__dict__[args.arch](patch_size=args.patch_size, in_chans= len(selected_channels), img_size=[args.image_size],)
         embed_dim = student.embed_dim
     # otherwise, we check if the architecture is in torchvision models
     elif args.arch in torchvision_models.__dict__.keys():
@@ -488,8 +491,10 @@ class DINOLoss(nn.Module):
 
 
 class DataAugmentationDINO(object):
-    def __init__(self,images_are_RGB, global_crops_scale, local_crops_scale, local_crops_number, mean_for_selected_channel,std_for_selected_channel):
+    def __init__(self,images_are_RGB, global_crops_scale, local_crops_scale, local_crops_number, mean_for_selected_channel,std_for_selected_channel, res=32):
         
+        local_res = int(res * 0.5)
+
         if not images_are_RGB:
             flip_gamma_brightness = transforms.Compose([
                 transforms.RandomHorizontalFlip(p=0.5),
@@ -504,14 +509,14 @@ class DataAugmentationDINO(object):
 
             # first global crop
             self.global_transfo1 = transforms.Compose([
-                transforms.RandomResizedCrop(32, scale=global_crops_scale, interpolation=transforms.InterpolationMode.BICUBIC),
+                transforms.RandomResizedCrop(res, scale=global_crops_scale, interpolation=transforms.InterpolationMode.BICUBIC),
                 flip_gamma_brightness,
                 utils.GaussianBlur_forGreyscaleMultiChan(1.0),
                 normalize,
             ])
             # second global crop
             self.global_transfo2 = transforms.Compose([
-                transforms.RandomResizedCrop(32, scale=global_crops_scale, interpolation=transforms.InterpolationMode.BICUBIC),
+                transforms.RandomResizedCrop(res, scale=global_crops_scale, interpolation=transforms.InterpolationMode.BICUBIC),
                 flip_gamma_brightness,
                 utils.GaussianBlur_forGreyscaleMultiChan(0.1),
                 utils.Solarization_forGreyscaleMultiChan(0.2),
@@ -520,7 +525,7 @@ class DataAugmentationDINO(object):
             # transformation for the local small crops
             self.local_crops_number = local_crops_number
             self.local_transfo = transforms.Compose([
-                transforms.RandomResizedCrop(16, scale=local_crops_scale, interpolation=transforms.InterpolationMode.BICUBIC),
+                transforms.RandomResizedCrop(local_res, scale=local_crops_scale, interpolation=transforms.InterpolationMode.BICUBIC),
                 flip_gamma_brightness,
                 utils.GaussianBlur_forGreyscaleMultiChan(0.5),
                 normalize,
@@ -543,14 +548,14 @@ class DataAugmentationDINO(object):
 
             # first global crop
             self.global_transfo1 = transforms.Compose([
-                transforms.RandomResizedCrop(32, scale=global_crops_scale, interpolation=transforms.InterpolationMode.BICUBIC),
+                transforms.RandomResizedCrop(res, scale=global_crops_scale, interpolation=transforms.InterpolationMode.BICUBIC),
                 flip_and_color_jitter,
                 utils.GaussianBlur(1.0),
                 normalize,
             ])
             # second global crop
             self.global_transfo2 = transforms.Compose([
-                transforms.RandomResizedCrop(32, scale=global_crops_scale, interpolation=transforms.InterpolationMode.BICUBIC),
+                transforms.RandomResizedCrop(res, scale=global_crops_scale, interpolation=transforms.InterpolationMode.BICUBIC),
                 flip_and_color_jitter,
                 utils.GaussianBlur(0.1),
                 utils.Solarization(0.2),
@@ -559,7 +564,7 @@ class DataAugmentationDINO(object):
             # transformation for the local small crops
             self.local_crops_number = local_crops_number
             self.local_transfo = transforms.Compose([
-                transforms.RandomResizedCrop(16, scale=local_crops_scale, interpolation=transforms.InterpolationMode.BICUBIC),
+                transforms.RandomResizedCrop(local_res, scale=local_crops_scale, interpolation=transforms.InterpolationMode.BICUBIC),
                 flip_and_color_jitter,
                 utils.GaussianBlur(p=0.5),
                 normalize,

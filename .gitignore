@@ -1,18 +1,39 @@
-**/.snakemake
-**/slurm_logs
-**/slurm_logs_old
-**/slurm_logs_old2
-**/umap_movie_grids
-**/.ipynb_checkpoints
-*.log
-**/output
+# System & IDE junk
 **/__pycache__
-/downstream_output/
-*.png
+*.py[cod]
+*$py.class
+.DS_Store
+.vscode/
+.ipynb_checkpoints
+**/.ipynb_checkpoints
+
+# HPC & Pipeline logs
+**/.snakemake
+**/slurm_logs*
+*.log
+
+# Large Data & Features
+*.jsonl
 *.npy
 *.tif
-*.mp4
-*.jsonl
-*.csv
-test_data/
+*.tiff
+/features/
+/test_data/
+/napari_csvs/
 
+# Model Outputs & Media
+/downstream_output/
+/attention_comp_out/
+/classifier_models
+**/output
+**/umap_movie_grids
+*.svg
+*.png
+*.mp4
+*.csv
+
+# Local Dev Directories
+/dev_notebooks/
+/pyscripts_original/
+/scDINO/
+/umap_explorer/

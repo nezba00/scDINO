@@ -1,0 +1,31 @@
+# inference_config.yaml
+# All fields are optional when using CLI flags.
+# CLI flags always take priority over values set here.
+
+# --- Paths ---
+root_crop_dir: /home/nbahou/myimaging/apoDet_refactored/data/paolo_data_d5_c12/windows_20x
+checkpoint: /home/nbahou/myimaging/scDINO/output/pao_dat_d5_c12/scDINO_ViTs/13ep_12ch_25-5-5-1_vitSmall04_lr0003_channel_0_1_2_3_4_5_6_7_8_9_a_b/checkpoint13.pth
+output_file: pao_dat_d5_c12_features.jsonl
+
+# Optional: path to cache the metadata lookup (speeds up repeated runs)
+# metadata_cache: /tmp/metadata_lookup.pkl
+
+# --- Model / data ---
+window_size: 32
+batch_size:  512
+num_workers: 15
+chunk_size:  200   # flush to disk every N batches
+
+# --- Normalisation (per-channel, 5 values each) ---
+# Computed from the training set. Remove these keys to fall back to the
+# built-in defaults hardcoded in inference.py.
+channel_mean: [0.29961212366142154, 0.2996344848427632, 0.2997295113515696, 0.29977997716102023, 0.29985765601465286, 0.29992509212085466, 0.29998519975361204, 0.30010711407568336, 0.3001974765555902, 0.30027388027937973, 0.3003703810601986, 0.30045434447060276]
+
+
+channel_std: [0.2654519639727381, 0.26536165109051335, 0.2653137995806238, 0.26526638613984677, 0.265228306825221, 0.26517250207428883, 0.2651470255954593, 0.2651333132943035, 0.26511217591539443, 0.26509897367734075, 0.26509461824994796, 0.26508957809816025]
+
+
+# --- Metadata path patching ---
+# Uncomment if your crops were moved and the metadata CSVs have stale paths.
+# patch_old: windows_20x_2cat_resize_128
+# patch_new: windows_20x

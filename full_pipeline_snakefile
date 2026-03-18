@@ -6,7 +6,8 @@ import yaml
 #### FUNCTIONS ####
 def get_channel_name_combi(channel_combi_num, channel_dict):
     name_of_channel_combi = ""
-    for channel_number in iter(str(channel_combi_num)):
+    for channel_char in iter(str(channel_combi_num)):
+        channel_number = int(channel_char, 16)
         name_of_channel_combi = "_".join([name_of_channel_combi, channel_dict[int(channel_number)]])
     return name_of_channel_combi
 
@@ -15,7 +16,7 @@ def get_channel_number_combi(channel_names, channel_dict):
     for channel_name in channel_names.split('_'):
         for key, value in channel_dict.items():
             if value == channel_name:
-                channel_combi = "".join([channel_combi, str(key)])
+                channel_combi = "".join([channel_combi, format(key, 'x')])
     return channel_combi
 
 def get_channel_name_combi_list(selected_channels, channel_dict):

@@ -36,8 +36,9 @@ import numpy as np
 import pandas as pd
 import tifffile as tiff
 import torch
-import yaml
+import torch.nn.functional as F
 from torch.utils.data import DataLoader, Dataset
+import yaml
 from tqdm import tqdm
 
 from pyscripts.vision_transformer import VisionTransformer
@@ -135,7 +136,7 @@ def parse_args() -> argparse.Namespace:
                         help="Root directory containing crop TIFFs and metadata CSVs")
     parser.add_argument("--checkpoint",     default=None,
                         help="Path to the pretrained checkpoint (.pth)")
-    parser.add_argument("--output_file",    default="features.jsonl",
+    parser.add_argument("--output_file",    default=None,
                         help="Output JSONL file for embeddings")
     parser.add_argument("--metadata_cache", default=None,
                         help="Optional path to cache/load the metadata lookup pickle")
@@ -233,8 +234,10 @@ def get_in_chans_from_checkpoint(checkpoint_path: str) -> int:
         key = "patch_embed.proj.weight"
 
     if key not in sd:
-        print(f"Could not find '{key}' in checkpoint — defaulting to in_chans=5.")
-        return 5
+        raise KeyError(
+            f"Could not find '{key}' in checkpoint after prefix stripping. "
+            "Cannot auto-detect in_chans — please inspect the checkpoint manually."
+        )
 
     in_chans = sd[key].shape[1]
     print(f"Auto-detected in_chans={in_chans} from checkpoint.")
@@ -357,10 +360,20 @@ def collect_crop_paths(
     print(f"Found {len(all_tiffs)} TIFFs")
 
     samples = []
+    unmatched = 0
     for file_path in tqdm(all_tiffs, desc="Collecting paths"):
         abs_path = os.path.realpath(file_path)
-        centroid = metadata_lookup.get(abs_path, (-1, 0, 0, 0, "Unknown"))
+        centroid = metadata_lookup.get(abs_path)
+        if centroid is None:
+            unmatched += 1
+            centroid = (-1, 0, 0, 0, "Unknown")
         samples.append((abs_path, centroid))
+
+    if unmatched:
+        print(
+            f"Warning: {unmatched}/{len(all_tiffs)} TIFFs had no metadata entry "
+            "and will be written with track_id=-1."
+        )
 
     return samples
 
@@ -371,23 +384,28 @@ def collect_crop_paths(
 
 class MultiChannelDataset(Dataset):
     """
-    Reads multi-channel TIFF crops and returns:
-        x            – (C, H, W) float32 tensor
-        numeric_meta – (4,)      float32 tensor  [track_id, t, y, x]
-        file_path    – str
-        timelapse_id – str
+    PyTorch Dataset for multi-channel TIFF crops produced by the scDINO pipeline.
 
-    The number of channels C is determined by the TIFF on disk and must match
-    the in_chans the model was trained with.
+    Each TIFF is expected to be stored in (H, W, C) layout. The number of channels
+    C is read directly from the file and must match the in_chans the model was
+    trained with — no channel validation or adjustment is performed.
 
-    Note: *window_size* is stored for reference but the crop size is determined
-    by the TIFF on disk; no runtime cropping/padding is applied here.
+    Spatial dimensions are handled automatically: if a crop's (H, W) does not
+    match *window_size*, it is resized via bilinear interpolation before being
+    passed to the model. A warning is printed on the first occurrence.
+
+    Returns a 4-tuple per sample:
+        x            - (C, H, W) float32 tensor, normalised if transform is given
+        numeric_meta - (4,)      float32 tensor  [track_id, t, y, x]
+        file_path    - str,      absolute path to the source TIFF
+        timelapse_id - str,      filename / timelapse identifier from metadata
     """
 
     def __init__(self, samples: list, transform=None, window_size: int = 32):
         self.samples = samples
         self.transform = transform
         self.window_size = window_size
+        self._resize_warned = False
 
     def __len__(self) -> int:
         return len(self.samples)
@@ -405,6 +423,23 @@ class MultiChannelDataset(Dataset):
             )
         except Exception as exc:
             raise RuntimeError(f"Error reading {file_path}: {exc}") from exc
+
+        # Resize if spatial dims don't match the expected window_size
+        h, w = x.shape[1], x.shape[2]
+        if h != self.window_size or w != self.window_size:
+            if not self._resize_warned:
+                print(
+                    f"Warning: crop shape ({h}×{w}) does not match "
+                    f"window_size={self.window_size}. Resizing via bilinear "
+                    f"interpolation. (Further mismatches will be silently corrected.)"
+                )
+                self._resize_warned = True
+            x = F.interpolate(
+                x.unsqueeze(0),
+                size=(self.window_size, self.window_size),
+                mode="bilinear",
+                align_corners=False,
+            ).squeeze(0)
 
         if self.transform:
             x = self.transform(x)
@@ -598,14 +633,15 @@ def main() -> None:
         transform=normalize,
         window_size=args.window_size,
     )
+    num_workers = args.num_workers
     loader = DataLoader(
         dataset,
         batch_size=args.batch_size,
         shuffle=False,
         num_workers=args.num_workers,
         pin_memory=True,
-        prefetch_factor=2,
-        persistent_workers=True,
+        prefetch_factor=2 if num_workers > 0 else None,
+        persistent_workers=num_workers > 0,
     )
 
     # Build model and run

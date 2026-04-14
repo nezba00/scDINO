@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name=inference
-#SBATCH --time=190:00:00            # wall clock for master process
+#SBATCH --time=20:00:00            # wall clock for master process
 #SBATCH --cpus-per-task=18          # lightweight — Snakemake itself is not heavy
 #SBATCH --mem=100G
 #SBATCH --output=./slurm_logs/inf.%j.out

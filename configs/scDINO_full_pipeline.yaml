@@ -1,27 +1,28 @@
 meta:
-  name_of_run: "test_scDINO_20x_ds2_t5_2cat_128"
+  name_of_run: "synth_morph_sq_trks_12f_36px_arch_test"
   output_dir: "/home/nbahou/myimaging/scDINO/output"
-  dataset_dir: "/home/nbahou/myimaging/apoDet/data/dataset2/windows_20x_2cat_resize_128"
+  dataset_dir: "/home/nbahou/myimaging/scDINO/scDINO/sim_tracks_sq_rect_2way_12f_d5_meta"
   folder_depth_for_labels: 0 # 0 is the folder where the images are, 1 is the folder above, etc.
   train_datasetsplit_fraction: 0.8
   seed: 40
   images_are_RGB: False
-  channel_dict: { 0: "0",1: "1",2: "2",3: "3",4: "4" } #do not use underscore or slash in channel name
-  selected_channel_combination_per_run: ["01234"] #01234 is all 5 channels, 0 is only APC, 1 is only BF, etc.
+  channel_dict: { 0: "0",1: "1",2: "2",3: "3",4: "4", 5: "5", 6: "6", 7: "7", 8: "8", 9: "9", 10: "a", 11: "b"} #do not use underscore or slash in channel name
+  selected_channel_combination_per_run: ["0"] #01234 is all 5 channels, 0 is only APC, 1 is only BF, etc.
   center_crop: 0 #0 is no center crop
 
 train_scDINO:
-  dino_vit_name: "300ep_5ch_resize128_25-5-5-1_vitSmall16_lr0003"
+  dino_vit_name: "33ep_12ch_25-5-5-1_vitSmall04_lr00015_monochannel"
   fraction_for_mean_std_calc: 0.1
-  epochs: 300
-  saveckp_freq: 5
+  epochs: 33
+  saveckp_freq: 1
   num_gpus: 2
-  batch_size_per_gpu: 256
-  num_workers: 20
+  batch_size_per_gpu: 512
+  num_workers: 18
   dist_url: "env://"
   hyperparameters:
     arch: "vit_small"
-    patch_size: 16
+    patch_size: 4
+    image_size: 32
     norm_last_layer: True
     momentum_teacher: 0.996
     use_bn_in_head: False
@@ -33,8 +34,8 @@ train_scDINO:
     weight_decay_end: 0.4
     clip_grad: 3
     freeze_last_layer: 1
-    lr: 0.0003
-    warmup_epochs: 35
+    lr: 0.00015
+    warmup_epochs: 16
     min_lr: 0.000008
     optimizer: "adamw"
     drop_path_rate: 0.1
@@ -46,7 +47,7 @@ train_scDINO:
 downstream_analyses:
   compute_cls_features:
     normalize: True
-    num_gpus: 2
+    num_gpus: 1
     batch_size_per_gpu: 128  #24
     num_workers: 16
     checkpoint_key: teacher
@@ -55,7 +56,8 @@ downstream_analyses:
   attention_visualisation:
     num_images_per_class: 2
     resize_attention_image: True
-    image_size: 128
+    model_image_size: 32
+    vis_image_size: 128
   kNN:
     global:
       n_neighbors: [5, 10, 50, 100, 200, 500]

@@ -1,7 +1,7 @@
 meta:
-  name_of_run: "scDINOtest1"
-  output_dir: "/home/nbahou/myimaging/scDINO/output"
-  dataset_dir: "/home/nbahou/myimaging/apoDet/data/windows_test"
+  name_of_run: "300ep_5ch_resize128_25-5-5-1_small16_lr0003_topo"
+  output_dir: "/home/nbahou/myimaging/scDINO/downstream_output/short_runs"
+  dataset_dir: "/home/nbahou/myimaging/apoDet/data/dataset2/windows_20x_2cat_resize_128"
   folder_depth_for_labels: 0 # 0 is the folder where the images are, 1 is the folder above, etc.
   test_datasetsplit_fraction: 0.1
   seed: 40 #should match scDINO seed if you want to use the same train/test split
@@ -10,29 +10,30 @@ meta:
   selected_channel_combination_per_run: ["01234"] #01234 is all 5 channels, 0 is only APC, 1 is only BF, etc.
   center_crop: 0 #0 is no center crop
 compute_cls_features:
-  use_weighted_sampler: False # if False, valdataset is used defined in meta
-  class_weights: "[0.1, 0.1, 0.1, 0.1, 0.1]" # only used if use_weighted_sampler is True, length of list must be equal to number of classes
-  num_samples: 5000 # only used if use_weighted_sampler is True
+  use_weighted_sampler: True # if False, valdataset is used defined in meta
+  class_weights: "[0.962, 0.038]" # only used if use_weighted_sampler is True, length of list must be equal to number of classes
+  num_samples: 10000 # only used if use_weighted_sampler is True
   normalize: True
   parse_mean_std_from_file: True
-  mean_std_file_location: "dir/mean_and_std_of_dataset.txt"
-  norm_per_channel: "[(x,x,x,x,x)(x,x,x,x,x)]" #only used if parse_mean_std_from_file is False
+  mean_std_file_location: "/home/nbahou/myimaging/scDINO/output/test_scDINO_20x_ds2_t5_2cat_128/mean_and_std_of_dataset.txt"
+  norm_per_channel_file: "/home/nbahou/myimaging/scDINO/output/test_scDINO_20x_ds2_t5_2cat_128/mean_and_std_of_dataset.txt"
+  #norm_per_channel: [(x,x,x,x,x),(x,x,x,x,x)] #only used if parse_mean_std_from_file is False
   use_cuda: True
   num_gpus: 1
-  batch_size_per_gpu: 24
-  num_workers: 16
-  pretrained_weights: "dir_to_pretrained_weights"
+  batch_size_per_gpu: 256
+  num_workers: 8
+  pretrained_weights: "/home/nbahou/myimaging/scDINO/output/test_scDINO_20x_ds2_t5_2cat_128/scDINO_ViTs/300ep_5ch_resize128_25-5-5-1_vitSmall16_lr0003_channel_0_1_2_3_4"
   read_model_arch_dynamically: False
   arch: "vit_small" #only used if read_model_arch_dynamically is False
-  patch_size: 8 #only used if read_model_arch_dynamically is False
+  patch_size: 16 #only used if read_model_arch_dynamically is False
   use_mean_patch_embedding: False
   use_custom_embedding_map: False # if True, the embedding map is defined by the user below
-  custom_embedding_map: "{0:2, 1:2, 2:2, 3:2, 4:2}" #first is the channel of the input image and the second is the channel of the embedding
+  # custom_embedding_map: {0:2, 1:2, 2:2, 3:2, 4:2} #first is the channel of the input image and the second is the channel of the embedding
   images_are_RGB: False
-  resize: True
+  resize: False
   resize_length: 224 #only used if resize is True
 attention_visualisation:
-  num_images_per_class: 1
+  num_images_per_class: 3
 kNN:
   global:
     n_neighbors: [5, 10, 50, 100, 200, 500]
@@ -43,5 +44,5 @@ umap_eval:
   n_components: 2
   metric: euclidean
   spread: 1.1
-  epochs: 100
-  topometry_plots: False
+  epochs: 300
+  topometry_plots: True
